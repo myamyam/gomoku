@@ -1,0 +1,2 @@
+# gomoku
+Lets play gomoku
