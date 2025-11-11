@@ -2,18 +2,23 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>Gomoku Game</title>
+  <title>🕹️ Gomoku Game</title>
   <link rel="stylesheet" href="style.css" />
-  <script>
-    const params = new URLSearchParams(window.location.search);
-    const roomId = params.get("room") || "room1";
-  </script>
 </head>
 <body>
   <div class="container">
-    <h1>🕹️ Room: <span id="room-id"></span></h1>
-    <div class="board" id="board"></div>
+    <h1 id="room-title">🕹️ Gomoku Game</h1>
 
+    <!-- 플레이어 이름/턴 표시 -->
+    <div class="players">
+      <div class="player black-player" id="black-player">⚫ 흑: 대기중</div>
+      <div class="player white-player" id="white-player">⚪ 백: 대기중</div>
+    </div>
+
+    <!-- 오목판 -->
+    <div id="board" class="board"></div>
+
+    <!-- 채팅 -->
     <div class="chat">
       <div id="chat-log" class="chat-log"></div>
       <input id="chat-input" type="text" placeholder="메시지 입력 후 Enter" />
@@ -21,58 +26,153 @@
   </div>
 
   <script>
-    const roomEl = document.getElementById("room-id");
+    const params = new URLSearchParams(window.location.search);
+    const roomId = params.get("room");
+    const role = params.get("role");
+    const nickname = params.get("nick");
+
+    document.getElementById("room-title").textContent = `🕹️ ${roomId}`;
+
+    const ws = new WebSocket("ws://localhost:5000");
     const boardEl = document.getElementById("board");
     const chatInput = document.getElementById("chat-input");
     const chatLog = document.getElementById("chat-log");
-
-    roomEl.textContent = roomId;
-
-    const ws = new WebSocket("ws://localhost:5000");
+    const blackLabel = document.getElementById("black-player");
+    const whiteLabel = document.getElementById("white-player");
 
     const SIZE = 15;
     let myStone = null;
+    let currentTurn = null;
+    let gameOver=false;
 
-    ws.onopen = () => {
-      console.log("✅ 서버 연결 완료");
-      ws.send(JSON.stringify({ type: "JOIN_ROOM", data: { room_id: roomId } }));
-    };
+    const resultBox=document.createElement("div");
+    resultBox.id="result-box"
+    resultBox.style.textAlign="center"
+    resultBox.style.marginTop="10px";
+    resultBox.style.fontSize="20px";
+    document.body.appendChild(resultBox);
 
+    // 🧱 오목판 그리기
+    function drawBoard() {
+      boardEl.innerHTML = "";
+      const SIZE=15;
+      const MARGIN =10;
+      const GAP= 700/14;
+      const OFFSET= 20;
+
+      for (let y = 0; y < SIZE; y++) {
+        for (let x = 0; x < SIZE; x++) {
+          const point = document.createElement("div");
+          point.className = "point";
+          point.style.left = `${MARGIN + GAP * x}px`;
+          point.style.top = `${MARGIN + GAP * y}px`;
+          point.dataset.x = x;
+          point.dataset.y = y;
+          if (role !== "spectator") {
+            point.addEventListener("click", () => tryPlaceStone(x, y));
+          }
+          boardEl.appendChild(point);
+        }
+      }
+    }
+    drawBoard();
+
+    // 🧩 착수 요청
+    function tryPlaceStone(x, y) {
+      if (role === "spectator") return;
+      if (myStone !== currentTurn) {
+        alert("지금은 당신의 턴이 아닙니다!");
+        return;
+      }
+      ws.send(JSON.stringify({
+        type: "MOVE",
+        data: { room_id: roomId, x, y }
+      }));
+    }
+
+    // 🧩 채팅
+    chatInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter" && chatInput.value.trim() !== "") {
+        ws.send(JSON.stringify({
+          type: "CHAT",
+          data: { room_id: roomId, msg: chatInput.value, sender: nickname }
+        }));
+        chatInput.value = "";
+      }
+    });
+
+    // 🧩 메시지 수신
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       const { type, data } = msg;
-
-      if (type === "SYSTEM") {
-        appendChat(`[SYSTEM] ${data.msg}`);
-      }
-
+    
       if (type === "JOIN_SUCCESS") {
-        appendChat("✅ 방에 입장했습니다!");
+        if (data.role === "player") {
+            myStone = data.stone;
+            document.getElementById("player-info").textContent =
+                `${nickname} (${myStone === "black" ? "⚫ 흑" : "⚪ 백"})`;
+        }   else {
+            document.getElementById("player-info").textContent = `${nickname} (관전자 👁️)`;
+        }
       }
-
-      if (type === "ASSIGN_COLOR") {
-        myStone = data.color;
-        appendChat('당신은 ${myStone === "black" ? "⚫" : "⚪"} 입니다.');
+      if(type==="BOARD_STATE"){
+        // 관전자는 현재 보드 상태 받기
+        const board=data.board;
+        for(let y=0;y<board.length;y++){
+            for(let x=0;x<board[y].length;x++){
+                const stone=board[y][x];
+                const point=document.querySelector(`[data-x='${x}'][data-y='${y}']`);
+                if(stone==="black"||stone==="white"){
+                    document.querySelector(`[data-x='${x}'][data-y='${y}']`).classList.add(stone);
+                }
+            }
+        }
       }
       if (type === "MOVE") {
         const { x, y, stone } = data;
-        const cell = document.querySelector(`[data-x='${x}'][data-y='${y}']`);
-        if (cell && !cell.classList.contains("black") && !cell.classList.contains("white")){
-            cell.classList.add(stone);
+        const point = document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
+        if (point && !point.classList.contains("black") && !point.classList.contains("white")) {
+          point.classList.add(stone);
         }
       }
 
-      if (type === "CHAT") {
-        appendChat(`${data.sender}: ${data.msg}`);
+      if (type === "TURN") {
+        currentTurn = data.next;
+        updateTurnIndicator();
+      }
+      if(type==="GAME_OVER"){
+        gameOver=true;
+        const winColor=data.winner==="black"?"⚫ 흑":"⚪ 백";
+        resultBox.innerHTML=`
+            <h2>${winColor} 승리!</h2>
+            <button id="restart-btn">다시 플레이하기</button>
+        `;
+        document.getElementById("restart-btn").onclick=restartGame;
       }
 
-      if (type === "GAME_OVER") {
-        alert(`🎉 승자: ${data.winner}`);
-      }
+      if (type === "CHAT") appendChat(`${data.sender}: ${data.msg}`);
+      if (type === "SYSTEM") appendChat(`[SYSTEM] ${data.msg}`);
     };
 
-    ws.onerror = (err) => {
-      console.error("⚠️ WebSocket 오류:", err);
+    // 🎯 턴 표시 업데이트
+    function updateTurnIndicator() {
+      blackLabel.classList.remove("active");
+      whiteLabel.classList.remove("active");
+
+      if (currentTurn === "black") {
+        blackLabel.classList.add("active");
+      } else {
+        whiteLabel.classList.add("active");
+      }
+    }
+
+    // 🧠 접속 후 역할 표시 (흑/백/관전자)
+    ws.onopen = () => {
+      if (role === "player") {
+        ws.send(JSON.stringify({ type: "JOIN_ROOM", data: { room_id: roomId, role: "player", nickname: nickname } }));
+      } else if (role === "spectator") {
+        ws.send(JSON.stringify({ type: "JOIN_ROOM", data: { room_id: roomId, role: "spectator", nickname: nickname } }));
+      }
     };
 
     function appendChat(text) {
@@ -82,39 +182,11 @@
       chatLog.scrollTop = chatLog.scrollHeight;
     }
 
-    // 15x15 보드 생성
-    for (let y = 0; y < SIZE; y++) {
-      for (let x = 0; x < SIZE; x++) {
-        const cell = document.createElement("div");
-        cell.className = "cell";
-        cell.dataset.x = x;
-        cell.dataset.y = y;
-        cell.addEventListener("click", () => placeStone(x, y));
-        boardEl.appendChild(cell);
-      }
+    function restartGame(){
+        gameOver=false;
+        resultBox.innerHTML="";
+        drawBoard();
     }
-
-    function placeStone(x, y) {
-        if (!myStone) {
-            alert("아직 돌이 배정되지 않았습니다");
-            return;
-        }
-        ws.send(JSON.stringify({
-            type: "MOVE",
-            data: { room_id: roomId, x, y, stone: myStone || "X" }
-        }));
-    }
-
-    // 채팅 입력
-    chatInput.addEventListener("keypress", (e) => {
-      if (e.key === "Enter" && chatInput.value.trim() !== "") {
-        ws.send(JSON.stringify({
-          type: "CHAT",
-          data: { room_id: roomId, msg: chatInput.value, sender: "나" }
-        }));
-        chatInput.value = "";
-      }
-    });
   </script>
 </body>
 </html>
