@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Gomoku Game</title>
+  <link rel="stylesheet" href="style.css" />
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const roomId = params.get("room") || "room1";
+  </script>
+</head>
+<body>
+  <div class="container">
+    <h1>🕹️ Room: <span id="room-id"></span></h1>
+    <div class="board" id="board"></div>
+
+    <div class="chat">
+      <div id="chat-log" class="chat-log"></div>
+      <input id="chat-input" type="text" placeholder="메시지 입력 후 Enter" />
+    </div>
+  </div>
+
+  <script>
+    const roomEl = document.getElementById("room-id");
+    const boardEl = document.getElementById("board");
+    const chatInput = document.getElementById("chat-input");
+    const chatLog = document.getElementById("chat-log");
+
+    roomEl.textContent = roomId;
+
+    const ws = new WebSocket("ws://localhost:5000");
+
+    const SIZE = 15;
+    let myStone = null;
+
+    ws.onopen = () => {
+      console.log("✅ 서버 연결 완료");
+      ws.send(JSON.stringify({ type: "JOIN_ROOM", data: { room_id: roomId } }));
+    };
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      const { type, data } = msg;
+
+      if (type === "SYSTEM") {
+        appendChat(`[SYSTEM] ${data.msg}`);
+      }
+
+      if (type === "JOIN_SUCCESS") {
+        appendChat("✅ 방에 입장했습니다!");
+      }
+
+      if (type === "ASSIGN_COLOR") {
+        myStone = data.color;
+        appendChat('당신은 ${myStone === "black" ? "⚫" : "⚪"} 입니다.');
+      }
+      if (type === "MOVE") {
+        const { x, y, stone } = data;
+        const cell = document.querySelector(`[data-x='${x}'][data-y='${y}']`);
+        if (cell && !cell.classList.contains("black") && !cell.classList.contains("white")){
+            cell.classList.add(stone);
+        }
+      }
+
+      if (type === "CHAT") {
+        appendChat(`${data.sender}: ${data.msg}`);
+      }
+
+      if (type === "GAME_OVER") {
+        alert(`🎉 승자: ${data.winner}`);
+      }
+    };
+
+    ws.onerror = (err) => {
+      console.error("⚠️ WebSocket 오류:", err);
+    };
+
+    function appendChat(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      chatLog.appendChild(div);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    // 15x15 보드 생성
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        cell.dataset.x = x;
+        cell.dataset.y = y;
+        cell.addEventListener("click", () => placeStone(x, y));
+        boardEl.appendChild(cell);
+      }
+    }
+
+    function placeStone(x, y) {
+        if (!myStone) {
+            alert("아직 돌이 배정되지 않았습니다");
+            return;
+        }
+        ws.send(JSON.stringify({
+            type: "MOVE",
+            data: { room_id: roomId, x, y, stone: myStone || "X" }
+        }));
+    }
+
+    // 채팅 입력
+    chatInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter" && chatInput.value.trim() !== "") {
+        ws.send(JSON.stringify({
+          type: "CHAT",
+          data: { room_id: roomId, msg: chatInput.value, sender: "나" }
+        }));
+        chatInput.value = "";
+      }
+    });
+  </script>
+</body>
+</html>

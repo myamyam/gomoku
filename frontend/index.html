@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>🎮 Gomoku Lobby</title>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    let ws;
+
+    window.onload = function() {
+      ws = new WebSocket("ws://localhost:5000");
+
+      ws.onopen = () => {
+        console.log("✅ 서버 연결 완료");
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+
+        if (msg.type === "ROOM_CREATED") {
+          const roomId = msg.data.room_id;
+          alert(`새 방 생성됨: ${roomId}`);
+          window.location.href = "game.html?room=" + roomId;
+        }
+
+        if (msg.type === "ROOM_LIST") {
+          const listDiv = document.getElementById("room-list");
+          listDiv.innerHTML = "";
+
+          const rooms = msg.data.rooms;
+          if (!rooms || rooms.length === 0) {
+            const emptyMsg = document.createElement("div");
+            emptyMsg.textContent = "현재 생성된 방이 없습니다 😴";
+            emptyMsg.className = "empty-msg";
+            listDiv.appendChild(emptyMsg);
+            return;
+          }
+
+          rooms.forEach(r => {
+            const row = document.createElement("div");
+            row.className = "room-row";
+
+            const info = document.createElement("span");
+            info.textContent = `${r.room_id} (${r.players}/2)`;
+
+            const btnJoin = document.createElement("button");
+            btnJoin.textContent = r.players < 2 ? "입장" : "관전하기 👁️";
+            btnJoin.className = r.players < 2 ? "room-btn" : "spectate-btn";
+
+            btnJoin.onclick = () => {
+              ws.send(JSON.stringify({ type: "JOIN_ROOM", data: { room_id: r.room_id } }));
+              window.location.href = "game.html?room=" + r.room_id;
+            };
+
+            row.appendChild(info);
+            row.appendChild(btnJoin);
+            listDiv.appendChild(row);
+          });
+        }
+
+        if (msg.type === "FULL_ROOM") {
+          alert(msg.data.msg);
+        }
+      };
+    };
+
+    function createRoom() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        alert("서버 연결이 안 되어 있습니다!");
+        return;
+      }
+      ws.send(JSON.stringify({ type: "CREATE_ROOM", data: {} }));
+    }
+  </script>
+</head>
+<body>
+  <h1>🎮 Gomoku Lobby</h1>
+  <div id="room-list" class="room-list"></div>
+  <button onclick="createRoom()" class="create-btn">새 방 만들기</button>
+</body>
+</html>

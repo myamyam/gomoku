@@ -1,3 +1,32 @@
-python3 server/server.py &
-sleep 1
-python3 client/client.py
+# 🟢 Gomoku Socket Localhost Test Script
+
+# Python 실행 경로 설정 (필요 시 수정)
+PYTHON=python3
+
+# 서버 실행 (백그라운드)
+echo "[1/3] 서버 실행 중..."
+$PYTHON server/server.py &
+SERVER_PID=$!
+sleep 1  # 서버가 포트 바인딩할 시간 확보
+
+# 클라이언트 1 (플레이어1)
+echo "[2/3] 클라이언트 1 (플레이어) 실행..."
+$PYTHON client/client.py &
+sleep 0.5
+
+# 클라이언트 2 (플레이어2)
+echo "[3/3] 클라이언트 2 (플레이어) 실행..."
+$PYTHON client/client.py &
+sleep 0.5
+
+# 관전자 클라이언트 (선택)
+echo "[옵션] 관전자 클라이언트 실행..."
+$PYTHON client/client.py &
+
+# 종료 처리
+echo ""
+echo "----------------------------------------"
+echo "✅ 서버와 클라이언트가 모두 실행되었습니다."
+echo "각 터미널에서 테스트를 진행하세요."
+echo "종료하려면: kill $SERVER_PID"
+echo "----------------------------------------"
