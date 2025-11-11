@@ -55,17 +55,11 @@
     // 🧱 오목판 그리기
     function drawBoard() {
       boardEl.innerHTML = "";
-      const SIZE=15;
-      const MARGIN =10;
-      const GAP= 700/14;
-      const OFFSET= 20;
 
       for (let y = 0; y < SIZE; y++) {
         for (let x = 0; x < SIZE; x++) {
           const point = document.createElement("div");
           point.className = "point";
-          point.style.left = `${MARGIN + GAP * x}px`;
-          point.style.top = `${MARGIN + GAP * y}px`;
           point.dataset.x = x;
           point.dataset.y = y;
           if (role !== "spectator") {
